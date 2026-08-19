@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDR Calc</title>
+<style>
+  :root{
+    --bg:#f0f0f0; --card:#ffffff; --line:#b9b9b9; --ink:#1b1b1b;
+    --accent:#1565c0; --accent2:#e8f0fe; --good:#1b7a3d;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink);font-size:15px}
+  .wrap{max-width:1040px;margin:0 auto;padding:12px}
+
+  /* AI scan bar */
+  .aibar{margin-bottom:10px;font-size:12px}
+  .aibar summary{cursor:pointer;font-weight:bold;color:var(--accent)}
+  .aibar label{display:flex;gap:6px;align-items:center;margin-top:6px}
+  .aibar input{border:1px solid var(--line);border-radius:6px;padding:6px;font-size:13px;flex:1;max-width:340px}
+  .aihint{display:block;color:#777;margin-top:4px}
+  .scanstatus{display:none;margin-top:6px;background:var(--ink);color:#fff;padding:6px 10px;border-radius:6px;font-weight:bold;width:max-content;max-width:100%}
+
+  /* ---------- SUMMARY FORM (top) ---------- */
+  .sheet{background:#fff;border:1px solid var(--ink);padding:12px;margin-bottom:16px}
+  .sheet-head{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;margin-bottom:10px}
+  .sheet-head label{display:flex;align-items:baseline;gap:6px;font-size:12px;font-weight:bold;border-bottom:1px solid var(--ink);padding-bottom:2px}
+  .sheet-head label span{white-space:nowrap}
+  .sheet-head input{border:0;flex:1;font-size:13px;padding:2px;min-width:0;font-weight:normal}
+  .sheet-head input:focus{outline:none;background:var(--accent2)}
+  .sheet-head label.wide{grid-column:1 / -1;align-items:center}
+  .moreinfo{margin:2px 0 10px}
+  .moreinfo summary{cursor:pointer;font-size:11px;font-weight:bold;color:#666;padding:2px 0}
+  .moreinfo .sheet-head{margin-top:8px}
+
+  .sheet-tables{display:grid;grid-template-columns:1fr 1fr 0.85fr;gap:14px}
+  table.sum{width:100%;border-collapse:collapse;font-size:12px}
+  table.sum th,table.sum td{border:1px solid var(--ink);padding:3px 5px}
+  table.sum th{background:#efefef;font-size:10px;text-transform:uppercase}
+  table.sum td.name{text-align:left;white-space:nowrap}
+  table.sum td.val{text-align:center;width:34px;font-weight:bold}
+  table.sum td.alu{color:var(--accent);font-weight:bold;width:26px;text-align:center;font-size:10px}
+  table.sum tr.filled td{background:#f2f8ff}
+  .colhead{width:34px}
+
+  /* Nebenkosten rate sheet (framed, below the panels) */
+  .rates-frame{background:#fff;border:1px solid var(--ink);border-radius:8px;padding:12px;margin-bottom:16px}
+  .rates-frame h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:#444}
+  .rates{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px 10px}
+  .rate-item{display:flex;align-items:center;gap:6px;font-size:12px;background:#ececec;padding:5px 8px;border:1px solid #c5c5c5;border-radius:4px}
+  .rate-item input[type=checkbox]{width:16px;height:16px;flex:0 0 auto;margin:0}
+  .rate-item .rlabel{flex:1;font-weight:bold;line-height:1.1}
+  .rate-item .rval{white-space:nowrap;font-weight:bold;color:#222}
+  .rate-item .rqty{min-width:26px;text-align:center;border:1px solid #999;border-radius:4px;padding:2px 4px;background:#fff;font-weight:bold}
+  .rate-item.on{background:#e7f5ec;border-color:var(--good)}
+
+  /* AW totals column (beside tables) + note */
+  .totcol{display:flex;flex-direction:column;gap:6px;align-self:start}
+  .tblbadge{background:var(--accent2);color:var(--accent);border:1px solid var(--accent);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:bold;text-align:center;margin-bottom:2px}
+  .tc-row{display:flex;flex-direction:column;gap:1px;border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+  .tc-row span{font-size:11px;font-weight:bold;color:#555;text-transform:uppercase;letter-spacing:.3px}
+  .tc-row b{font-size:17px;font-variant-numeric:tabular-nums}
+  .tc-row.grand{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .tc-row.grand span{color:#cfe0ff}
+  .rateinp{width:72px;text-align:right;border:1px solid var(--line);border-radius:4px;padding:4px;font-weight:bold;font-size:14px}
+  .genbtn{margin-top:2px;background:var(--accent);color:#fff;border:0;border-radius:6px;padding:10px;font-weight:bold;cursor:pointer;font-size:13px}
+  .genbtn.share{background:var(--good)}
+
+  /* ---------- CAR PANEL BOXES ---------- */
+  h2.sec{font-size:13px;margin:4px 2px 8px;color:#444;text-transform:uppercase;letter-spacing:.5px}
+  .car{display:grid;grid-template-columns:1.3fr 0.42fr 1.56fr 0.42fr 1.3fr;grid-template-rows:122px 172px 172px 122px;gap:8px;align-items:stretch}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;min-height:104px;min-width:0}
+  .panel.thin{background:#fafafa}
+  .panel.thin .row{flex-direction:column}          /* Qty above Size, each full width */
+  .panel.thin .chkrow{flex-direction:column;align-items:flex-start;gap:6px;flex-wrap:nowrap}
+  .panel.thin .p-head{flex-direction:column;align-items:flex-start;gap:5px}  /* camera below number */
+  .panel.thin .camicon{margin-left:0}
+  .panel.thin .p-name{display:none}
+  .panel.active{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent2)}
+  .p-head{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:bold;line-height:1.1}
+  .num{background:var(--ink);color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;flex:0 0 auto}
+  .p-name{font-size:11px;color:#333}
+  .row{display:flex;gap:6px}
+  .row > *{flex:1;min-width:0}
+  .fld{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .fld span{font-size:9px;color:#777;text-transform:uppercase;letter-spacing:.3px}
+  .panel input[type=number],.panel select{width:100%;border:1px solid var(--line);border-radius:6px;padding:7px 4px;font-size:15px;text-align:center;background:#fff}
+  .panel input[type=number]{font-weight:bold}
+  .chkrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .alubox{display:flex;align-items:center;gap:3px;font-size:11px;font-weight:bold;color:var(--accent);cursor:pointer;user-select:none}
+  .alubox.kleb{color:#6a1b9a}
+  .alubox.ptp{color:#a15200}
+  .alubox.hor{color:#00695c}
+  .alubox.neu{color:#b71c1c}
+  .alubox input{width:16px;height:16px;margin:0}
+  .camicon{margin-left:auto;border:1px solid var(--line);background:#fff;border-radius:6px;padding:1px 7px;font-size:14px;cursor:pointer;line-height:1.4}
+  .camicon.has{border-color:var(--good);background:#e7f5ec}
+
+  .p7{grid-column:1;grid-row:1}.p1{grid-column:3;grid-row:1}.p11{grid-column:5;grid-row:1}
+  .p8{grid-column:1;grid-row:2}.p5{grid-column:2;grid-row:2 / span 2}.p6{grid-column:4;grid-row:2 / span 2}.p12{grid-column:5;grid-row:2}
+  .p9{grid-column:1;grid-row:3}.p13{grid-column:5;grid-row:3}
+  .p10{grid-column:1;grid-row:4}.p14{grid-column:5;grid-row:4}
+  .p8,.p9,.p12,.p13{min-height:172px}   /* doors taller; Dachrahmen 5/6 span these so they follow */
+  .p10,.p14{min-height:0}               /* rear quarter panels reduced */
+
+  /* center column stack: Haube / Dach (taller) / Heckklappe oben+unten (shorter) */
+  .center-col{grid-column:3;grid-row:1 / span 4;display:flex;flex-direction:column;gap:8px;min-width:0}
+  .center-col .panel{flex:0 0 auto}      /* natural height — never shrink below content */
+  .center-col .p1{min-height:138px}      /* Haube — taller */
+  .center-col .p2{min-height:180px}      /* Dach — extended taller */
+
+  /* ---------- BOTTOM BAR ---------- */
+  .totbar{position:sticky;bottom:0;background:var(--ink);color:#fff;display:flex;justify-content:space-between;align-items:center;padding:12px 16px;font-size:14px;z-index:20;flex-wrap:wrap;gap:8px}
+  .totbar b{font-size:20px}
+  .btns{display:flex;gap:8px}
+  .btns button{border:0;border-radius:8px;padding:9px 12px;font-size:13px;font-weight:bold;cursor:pointer}
+  .b-print{background:#fff;color:var(--ink)}
+  .b-reset{background:#8a2b2b;color:#fff}
+
+  @media (max-width:640px){
+    .sheet-head{grid-template-columns:1fr}
+    .sheet-tables{grid-template-columns:1fr}
+    .rates{grid-template-columns:1fr}
+    .car{grid-template-columns:1fr 1fr;grid-template-rows:none}
+    .center-col{display:contents}
+    .car .panel{grid-column:auto !important;grid-row:auto !important}
+    .panel.thin{grid-column:1 / -1 !important}
+  }
+  @media print{
+    .totbar{position:static}.btns,.camicon{display:none}
+    body{background:#fff}.wrap{max-width:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="aibar">
+    <details>
+      <summary>⚙ AI-Scan (Claude)</summary>
+      <label>API-Key <input id="aiKey" type="password" placeholder="Anthropic API key (sk-ant-…)" autocomplete="off"></label>
+      <span class="aihint">Marke 📷 erkennt die Marke am Emblem · FIN 📷 liest die FIN (beide via Claude) · Kennzeichen 📷 nutzt OCR im Browser (kein API-Key nötig).</span>
+    </details>
+    <div id="scanStatus" class="scanstatus"></div>
+  </div>
+
+  <!-- ============ SUMMARY FORM ============ -->
+  <div class="sheet">
+    <div class="sheet-head">
+      <label class="wide"><span>Kunde</span><input id="m_kunde"></label>
+      <label><span>Marke</span><input id="m_make"><button type="button" class="camicon" id="cambtnmarke" title="Take photo" onclick="document.getElementById('cammarke').click()">📷</button><input id="cammarke" type="file" accept="image/*" capture="environment" style="display:none" onchange="photo('marke',this)"></label>
+      <label><span>Modell</span><input id="m_model"></label>
+      <label><span>Kennzeichen</span><input id="m_plate"><button type="button" class="camicon" id="cambtnplate" title="Kennzeichen scannen (OCR)" onclick="document.getElementById('camplate').click()">📷</button><input id="camplate" type="file" accept="image/*" capture="environment" style="display:none" onchange="photo('plate',this)"></label>
+      <label><span>FIN</span><input id="m_vin"><button type="button" class="camicon" id="cambtnvin" title="Take photo" onclick="document.getElementById('camvin').click()">📷</button><input id="camvin" type="file" accept="image/*" capture="environment" style="display:none" onchange="photo('vin',this)"></label>
+      <label><span>Farbe</span><input id="m_farbe"></label>
+      <label><span>Laufleistung</span><input id="m_km" inputmode="numeric"></label>
+      <label><span>Datum</span><input id="m_date" type="date"></label>
+    </div>
+    <details class="moreinfo">
+      <summary>+ Weitere Angaben (nur fürs Dokument)</summary>
+      <div class="sheet-head">
+        <label><span>Adresse</span><input id="m_adresse"></label>
+        <label><span>PLZ/Stadt</span><input id="m_plz"></label>
+        <label><span>Erstzulassung</span><input id="m_erst" type="date"></label>
+        <label><span>Protokollnummer</span><input id="m_protokoll"></label>
+        <label><span>Rechnungsnummer</span><input id="m_rechnung"></label>
+        <label><span>Auftragsnummer</span><input id="m_auftrag"></label>
+        <label><span>Sachbearbeiter</span><input id="m_sachb"></label>
+        <label><span>Stundenlohn €/h</span><input id="m_rate" type="number" min="0" step="1" value="87"></label>
+      </div>
+    </details>
+    <div class="sheet-tables">
+      <table class="sum"><thead><tr><th>#</th><th>Panel</th><th class="colhead">Qty</th><th class="colhead">Gr.</th><th class="colhead">AW</th></tr></thead><tbody id="sumL"></tbody></table>
+      <table class="sum"><thead><tr><th>#</th><th>Panel</th><th class="colhead">Qty</th><th class="colhead">Gr.</th><th class="colhead">AW</th></tr></thead><tbody id="sumR"></tbody></table>
+      <div class="totcol">
+        <div class="tblbadge" id="tblBadge">Tabelle 10er</div>
+        <div class="tc-row"><span>Bauteile 1–14</span><b id="awPanels">0,00</b></div>
+        <div class="tc-row"><span>Nebenkosten</span><b id="awSund">0,00</b></div>
+        <div class="tc-row grand"><span>Gesamt AW</span><b id="awGrand">0,00</b></div>
+        <button type="button" class="genbtn" onclick="genDoc()">📄 Kalkulation erstellen</button>
+        <button type="button" class="genbtn share" onclick="shareDoc()">📧 Als PDF senden</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ PANEL BOXES ============ -->
+  <div class="car" id="car"></div>
+
+  <!-- ============ NEBENKOSTEN ============ -->
+  <div class="rates-frame">
+    <h3>Nebenkosten</h3>
+    <div class="rates" id="rates"></div>
+  </div>
+
+</div>
+
+<script>
+const AWDATA={"10":{"H":{"1":{"10":5,"20":6,"30":7,"40":8,"50":9,"60":10,"70":11,"80":12},"2":{"10":6,"20":7,"30":9,"40":10,"50":12,"60":13,"70":15,"80":17},"3":{"10":7,"20":8,"30":10,"40":12,"50":14,"60":16,"70":19,"80":22},"4":{"10":7,"20":9,"30":12,"40":14,"50":17,"60":19,"70":23,"80":27},"5":{"10":8,"20":10,"30":13,"40":16,"50":19,"60":22,"70":27,"80":32},"6":{"10":9,"20":11,"30":15,"40":18,"50":22,"60":25,"70":31,"80":37},"7":{"10":10,"20":12,"30":16,"40":20,"50":24,"60":28,"70":35,"80":42},"8":{"10":10,"20":13,"30":18,"40":22,"50":27,"60":31,"70":39,"80":47},"9":{"10":11,"20":14,"30":19,"40":24,"50":29,"60":34,"70":43,"80":52},"10":{"10":12,"20":15,"30":21,"40":26,"50":32,"60":37,"70":47,"80":57},"13":{"10":13,"20":17,"30":23,"40":29,"50":36,"60":43,"70":55,"80":68},"16":{"10":14,"20":19,"30":25,"40":32,"50":40,"60":44,"70":64,"80":80},"19":{"10":15,"20":20,"30":27,"40":35,"50":44,"60":54,"70":72,"80":91},"22":{"10":16,"20":22,"30":29,"40":37,"50":48,"60":59,"70":79,"80":100},"25":{"10":17,"20":23,"30":30,"40":40,"50":51,"60":64,"70":85,"80":108},"28":{"10":18,"20":24,"30":32,"40":42,"50":54,"60":69,"70":92,"80":116},"31":{"10":19,"20":25,"30":33,"40":44,"50":58,"60":74,"70":98,"80":124},"34":{"10":19,"20":26,"30":35,"40":46,"50":61,"60":78,"70":104,"80":131},"37":{"10":20,"20":27,"30":36,"40":48,"50":64,"60":83,"70":111,"80":139},"40":{"10":21,"20":28,"30":38,"40":50,"50":68,"60":88,"70":117,"80":147},"45":{"10":22,"20":30,"30":40,"40":54,"50":73,"60":98,"70":128,"80":160},"50":{"10":23,"20":32,"30":43,"40":57,"50":78,"60":104,"70":138,"80":173},"55":{"10":25,"20":33,"30":45,"40":61,"50":84,"60":112,"70":149,"80":186},"60":{"10":26,"20":35,"30":48,"40":64,"50":89,"60":120,"70":159,"80":199},"65":{"10":27,"20":37,"30":50,"40":68,"50":95,"60":128,"70":170,"80":212},"70":{"10":28,"20":39,"30":53,"40":71,"50":101,"60":138,"70":180,"80":225},"75":{"10":30,"20":40,"30":55,"40":75,"50":106,"60":144,"70":191,"80":238},"80":{"10":31,"20":42,"30":58,"40":78,"50":112,"60":152,"70":201,"80":241},"85":{"10":32,"20":44,"30":60,"40":82,"50":117,"60":160,"70":212},"90":{"10":33,"20":46,"30":63,"40":85,"50":123,"60":166,"70":222},"95":{"10":35,"20":47,"30":65,"40":89,"50":128,"60":176},"100":{"10":36,"20":49,"30":68,"40":92,"50":134,"60":184},"110":{"10":38,"20":53,"30":73,"40":99,"50":145,"60":200},"120":{"10":41,"20":56,"30":78,"40":106,"50":156,"60":216},"130":{"10":43,"20":60,"30":83,"40":113,"50":166},"140":{"10":46,"20":63,"30":88,"40":120,"50":177},"150":{"10":48,"20":67,"30":93,"40":127,"50":188},"160":{"10":51,"20":70,"30":98,"40":134,"50":199},"170":{"10":53,"20":74,"30":103,"40":141,"50":210},"180":{"10":56,"20":77,"30":108,"40":148},"190":{"10":58,"20":80,"30":113,"40":155},"200":{"10":61,"20":84,"30":118,"40":162},"210":{"10":63,"20":87,"30":123,"40":169},"220":{"10":66,"20":91,"30":128,"40":176},"230":{"10":68,"20":94,"30":133,"40":183},"240":{"10":71,"20":98,"30":138,"40":190},"250":{"10":73,"20":102,"30":143,"40":197},"260":{"10":76,"20":105,"30":148,"40":204},"280":{"10":81,"20":112,"30":158,"40":218},"300":{"10":86,"20":119,"30":168}},"V":{"1":{"10":5,"20":6,"30":7,"40":10,"50":10,"60":10,"70":11,"80":12},"2":{"10":6,"20":8,"30":9,"40":12,"50":14,"60":14,"70":16,"80":19},"3":{"10":7,"20":9,"30":11,"40":14,"50":17,"60":18,"70":21,"80":25},"4":{"10":8,"20":11,"30":13,"40":17,"50":21,"60":22,"70":26,"80":32},"5":{"10":9,"20":12,"30":15,"40":19,"50":24,"60":26,"70":31,"80":38},"6":{"10":10,"20":13,"30":17,"40":21,"50":27,"60":29,"70":35,"80":43},"7":{"10":11,"20":14,"30":18,"40":23,"50":29,"60":32,"70":38,"80":47},"8":{"10":11,"20":15,"30":20,"40":25,"50":32,"60":35,"70":42,"80":52},"9":{"10":12,"20":16,"30":21,"40":27,"50":34,"60":38,"70":45,"80":56},"10":{"10":13,"20":17,"30":23,"40":29,"50":37,"60":41,"70":49,"80":61},"11":{"10":13,"20":18,"30":24,"40":30,"50":39,"60":44,"70":52,"80":65},"12":{"10":14,"20":19,"30":26,"40":33,"50":42,"60":47,"70":56,"80":69},"13":{"10":14,"20":20,"30":27,"40":35,"50":44,"60":50,"70":59},"14":{"10":15,"20":21,"30":29,"40":37,"50":47,"60":53,"70":63},"15":{"10":15,"20":22,"30":30,"40":39,"50":49,"60":56,"70":66},"16":{"10":16,"20":23,"30":32,"40":41,"50":52,"60":59},"17":{"10":16,"20":24,"30":33,"40":43,"50":54,"60":62},"18":{"10":17,"20":25,"30":35,"40":45,"50":57,"60":65},"19":{"10":17,"20":26,"30":36,"40":47,"50":59,"60":68},"20":{"10":18,"20":27,"30":38,"40":49,"50":62},"21":{"10":18,"20":28,"30":39,"40":51,"50":64},"22":{"10":19,"20":29,"30":40,"40":52,"50":66},"23":{"10":19,"20":29,"30":41,"40":54,"50":68},"24":{"10":20,"20":30,"30":42,"40":55},"25":{"10":20,"20":31,"30":43,"40":57},"26":{"10":21,"20":32,"30":44,"40":58},"27":{"10":21,"20":32,"30":45,"40":60},"28":{"10":22,"20":33,"30":46,"40":61},"29":{"10":22,"20":34,"30":47,"40":63},"30":{"10":23,"20":35,"30":48,"40":64},"31":{"10":23,"20":35,"30":49,"40":66},"32":{"10":24,"20":36,"30":50,"40":67},"33":{"10":24,"20":37,"30":51},"34":{"10":25,"20":38,"30":52},"35":{"10":25,"20":38,"30":53},"36":{"10":26,"20":39,"30":54},"37":{"10":26,"20":40,"30":55},"38":{"10":27,"20":41,"30":56},"39":{"10":27,"20":41,"30":57},"40":{"10":28,"20":42,"30":58},"41":{"10":28,"20":43,"30":59},"42":{"10":29,"20":44,"30":60},"43":{"10":29,"20":44,"30":61},"44":{"10":30,"20":45,"30":62},"45":{"10":30,"20":46,"30":63},"46":{"10":31,"20":47,"30":64},"47":{"10":31,"20":47,"30":65},"48":{"10":32,"20":48,"30":66},"49":{"10":32,"20":49,"30":67},"50":{"10":33,"20":50,"30":68}}},"12":{"H":{"1":{"10":6,"20":7,"30":8,"40":10,"50":11,"60":12,"70":13,"80":14},"2":{"10":7,"20":8,"30":11,"40":12,"50":14,"60":16,"70":18,"80":20},"3":{"10":8,"20":10,"30":12,"40":14,"50":17,"60":19,"70":23,"80":26},"4":{"10":8,"20":11,"30":14,"40":17,"50":20,"60":23,"70":28,"80":32},"5":{"10":10,"20":12,"30":16,"40":19,"50":23,"60":28,"70":32,"80":38},"6":{"10":11,"20":13,"30":18,"40":22,"50":26,"60":30,"70":37,"80":44},"7":{"10":12,"20":14,"30":19,"40":24,"50":29,"60":34,"70":42,"80":50},"8":{"10":12,"20":16,"30":22,"40":26,"50":32,"60":37,"70":47,"80":56},"9":{"10":13,"20":17,"30":23,"40":29,"50":35,"60":41,"70":52,"80":62},"10":{"10":14,"20":18,"30":25,"40":31,"50":38,"60":44,"70":56,"80":68},"13":{"10":16,"20":20,"30":28,"40":35,"50":43,"60":52,"70":66,"80":82},"16":{"10":17,"20":23,"30":30,"40":38,"50":48,"60":53,"70":77,"80":96},"19":{"10":18,"20":24,"30":32,"40":42,"50":53,"60":65,"70":86,"80":109},"22":{"10":19,"20":26,"30":35,"40":44,"50":58,"60":71,"70":95,"80":120},"25":{"10":20,"20":28,"30":36,"40":48,"50":61,"60":77,"70":102,"80":130},"28":{"10":21,"20":29,"30":39,"40":50,"50":65,"60":83,"70":110,"80":139},"31":{"10":23,"20":30,"30":40,"40":52,"50":70,"60":89,"70":118,"80":149},"34":{"10":23,"20":31,"30":42,"40":55,"50":73,"60":94,"70":125,"80":157},"37":{"10":24,"20":32,"30":43,"40":58,"50":77,"60":100,"70":133,"80":167},"40":{"10":25,"20":34,"30":46,"40":60,"50":82,"60":106,"70":140,"80":176},"45":{"10":26,"20":36,"30":48,"40":65,"50":88,"60":118,"70":154,"80":192},"50":{"10":28,"20":38,"30":52,"40":68,"50":94,"60":125,"70":166,"80":208},"55":{"10":30,"20":40,"30":54,"40":73,"50":101,"60":134,"70":179,"80":223},"60":{"10":31,"20":42,"30":58,"40":77,"50":107,"60":144,"70":191,"80":239},"65":{"10":32,"20":44,"30":60,"40":82,"50":114,"60":154,"70":204,"80":254},"70":{"10":34,"20":47,"30":64,"40":85,"50":122,"60":166,"70":216,"80":225},"75":{"10":36,"20":48,"30":66,"40":90,"50":127,"60":173,"70":229,"80":285},"80":{"10":37,"20":50,"30":70,"40":94,"50":134,"60":182,"70":242,"80":289},"85":{"10":38,"20":53,"30":72,"40":98,"50":140,"60":192,"70":254},"90":{"10":40,"20":55,"30":76,"40":102,"50":148,"60":199,"70":266},"95":{"10":42,"20":56,"30":78,"40":107,"50":154,"60":211},"100":{"10":43,"20":59,"30":82,"40":110,"50":161,"60":221},"110":{"10":46,"20":64,"30":88,"40":119,"50":174,"60":240},"120":{"10":49,"20":67,"30":94,"40":127,"50":187,"60":259},"130":{"10":52,"20":72,"30":100,"40":136,"50":199},"140":{"10":55,"20":76,"30":106,"40":144,"50":212},"150":{"10":58,"20":80,"30":112,"40":152,"50":226},"160":{"10":61,"20":84,"30":118,"40":134,"50":199},"170":{"10":64,"20":89,"30":124,"40":169,"50":252},"180":{"10":67,"20":92,"30":130,"40":178},"190":{"10":70,"20":96,"30":136,"40":186},"200":{"10":73,"20":101,"30":142,"40":194},"210":{"10":76,"20":104,"30":148,"40":203},"220":{"10":79,"20":109,"30":154,"40":211},"230":{"10":82,"20":113,"30":160,"40":220},"240":{"10":85,"20":118,"30":166,"40":228},"250":{"10":88,"20":122,"30":172,"40":236},"260":{"10":91,"20":126,"30":178,"40":245},"280":{"10":97,"20":134,"30":190,"40":262},"300":{"10":103,"20":143,"30":202}},"V":{"1":{"10":6,"20":7,"30":8,"40":11,"50":12,"60":12,"70":13,"80":14},"2":{"10":7,"20":10,"30":11,"40":14,"50":17,"60":17,"70":19,"80":23},"3":{"10":8,"20":11,"30":13,"40":17,"50":20,"60":22,"70":25,"80":30},"4":{"10":10,"20":13,"30":16,"40":20,"50":25,"60":26,"70":31,"80":38},"5":{"10":11,"20":14,"30":18,"40":23,"50":29,"60":31,"70":37,"80":46},"6":{"10":12,"20":16,"30":20,"40":25,"50":32,"60":34,"70":42,"80":52},"7":{"10":13,"20":17,"30":22,"40":28,"50":35,"60":39,"70":46,"80":57},"8":{"10":13,"20":18,"30":24,"40":30,"50":38,"60":42,"70":50,"80":62},"9":{"10":14,"20":19,"30":25,"40":32,"50":41,"60":46,"70":54,"80":67},"10":{"10":16,"20":20,"30":28,"40":35,"50":44,"60":49,"70":59,"80":73},"11":{"10":16,"20":22,"30":29,"40":37,"50":47,"60":53,"70":50},"12":{"10":17,"20":23,"30":31,"40":40,"50":50,"60":56,"70":67},"13":{"10":17,"20":24,"30":32,"40":42,"50":53,"60":60,"70":71},"14":{"10":18,"20":25,"30":32,"40":44,"50":56,"60":64},"15":{"10":18,"20":26,"30":36,"40":47,"50":59,"60":67},"16":{"10":19,"20":28,"30":38,"40":49,"50":62,"60":71},"17":{"10":19,"20":29,"30":40,"40":52,"50":65},"18":{"10":20,"20":30,"30":42,"40":54,"50":68},"19":{"10":20,"20":31,"30":43,"40":56,"50":71},"20":{"10":22,"20":32,"30":46,"40":59},"21":{"10":22,"20":34,"30":47,"40":61},"22":{"10":23,"20":35,"30":48,"40":62},"23":{"10":24,"20":35,"30":49,"40":65},"24":{"10":24,"20":36,"30":50,"40":66},"25":{"10":25,"20":37,"30":52,"40":68},"26":{"10":25,"20":38,"30":53,"40":70},"27":{"10":26,"20":38,"30":54,"40":72},"28":{"10":26,"20":40,"30":55},"29":{"10":28,"20":41,"30":56},"30":{"10":28,"20":42,"30":58},"31":{"10":28,"20":42,"30":59},"32":{"10":29,"20":43,"30":60},"33":{"10":29,"20":44,"30":61},"34":{"10":30,"20":46,"30":62},"35":{"10":30,"20":46,"30":64},"36":{"10":31,"20":47,"30":65},"37":{"10":31,"20":48,"30":66},"38":{"10":32,"20":49,"30":67},"39":{"10":32,"20":49,"30":68},"40":{"10":34,"20":50,"30":70},"41":{"10":34,"20":52,"30":71},"42":{"10":35,"20":53,"30":72},"43":{"10":35,"20":53},"44":{"10":36,"20":54},"45":{"10":36,"20":55},"46":{"10":37,"20":56},"47":{"10":37,"20":56},"48":{"10":38,"20":58},"49":{"10":38,"20":59},"50":{"10":40,"20":60}}}};
+
+// [num, css-class, name, thin?]
+const PANELS = {
+  1:['p1','Haube'],2:['p2','Dach'],3:['p3','Heckklappe oben'],4:['p4','Heckklappe unten'],
+  5:['p5','Dach­rahmen L',true],6:['p6','Dach­rahmen R',true],
+  7:['p7','Kotflügel VL'],8:['p8','Tür VL'],9:['p9','Tür HL'],10:['p10','Seitenwand ML'],
+  11:['p11','Kotflügel VR'],12:['p12','Tür VR'],13:['p13','Tür HR'],14:['p14','Seitenwand HR']
+};
+const LEFT=[1,3,5,7,8,9,10];      // left column of the summary form
+const RIGHT=[2,4,6,11,12,13,14];  // right column
+const GRID_ORDER=[1,2,3,4,5,6,7,8,9,10,11,12,13,14];
+const SIZES=[20,30,40,50,60,70,80];
+const $=s=>document.querySelector(s);
+
+// ---- build summary table rows ----
+function buildSum(ids,tbody){
+  ids.forEach(n=>{
+    const tr=document.createElement('tr');
+    tr.id='sumrow'+n;
+    tr.innerHTML=`<td class="val">${n}</td><td class="name">${PANELS[n][1]}</td>`+
+                 `<td class="val" id="q${n}"></td><td class="val" id="sz${n}"></td><td class="val" id="aw${n}"></td>`;
+    document.getElementById(tbody).appendChild(tr);
+  });
+}
+buildSum(LEFT,'sumL');buildSum(RIGHT,'sumR');
+
+// ---- build rate sheet (10er values shown in the source table) ----
+// order is row-major to match the printed 3-column layout
+// Alu, Kleben, Push-to-Paint are chosen per-panel in the boxes, so they are NOT here.
+const RATES=[
+  ['ruest','Rüstzeit pro Fahrzeug','6,00 AW'],
+  ['finish','Finish pro Bauteil','2,50 AW'],
+  ['finishmax','Finish Maximalwert','13,00 AW'],
+  ['ueber','Übergreifzone','9,00 AW'],
+  ['hohl','Hohlraumkonservierung','4,00 AW'],
+  ['transfer','Überführung','15,00 AW']
+];
+// flat AW values per divider — BVAT Calculation Guidelines (26.11.2024)
+const RATE_AW_ALL={
+  '10':{ruest:6, finish:2.5, finishmax:13,   ueber:9,  hohl:4, transfer:15},
+  '12':{ruest:7, finish:3,   finishmax:15.5, ueber:11, hohl:5, transfer:18}
+};
+// BVAT: per-panel surcharges COMPOUND (multiply), applied Push-to-Paint -> Aluminium -> Klebetechnik
+// e.g. 100 AW -40% = 60 -> +25% alu = 75 -> +30% Kleb = 97,50 AW
+const SUR={ptp:0.60, alu:1.25, kleb:1.30};
+// BVAT flat material costs in EUR (net)
+const MAT={hohl:15, kleb_le2:10, kleb_3to5:15, kleb_ge6:20};
+// 12er table is used for BMW & Mercedes; 10er for everything else. Decided by the Make field.
+function activeDivider(){
+  const mk=(document.getElementById('m_make').value||'').toLowerCase();
+  return /bmw|merc|benz|amg|maybach|alpina|brabus/.test(mk) ? '12' : '10';
+}
+// panel AW display: round to 2dp, drop trailing zeros, German comma
+function fmtAW(x){ return (Math.round(x*100)/100).toString().replace('.',','); }
+
+// FIN/VIN chars 1-3 = WMI (World Manufacturer Identifier) -> the make, free & offline.
+const WMI={
+  WBA:'BMW', WBS:'BMW', WBY:'BMW', WBX:'BMW', WB1:'BMW',
+  WMW:'MINI',
+  WDB:'Mercedes-Benz', WDC:'Mercedes-Benz', WDD:'Mercedes-Benz', WDF:'Mercedes-Benz',
+  W1K:'Mercedes-Benz', W1N:'Mercedes-Benz', W1V:'Mercedes-Benz',
+  WME:'Smart',
+  WVW:'Volkswagen', WVG:'Volkswagen', WV1:'Volkswagen', WV2:'Volkswagen', WV3:'Volkswagen',
+  WAU:'Audi', WA1:'Audi', WAV:'Audi', TRU:'Audi', TRJ:'Audi',
+  WP0:'Porsche', WP1:'Porsche',
+  W0L:'Opel', W0V:'Opel',
+  WF0:'Ford'
+};
+function makeFromVin(vin){
+  const p=(vin||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3);
+  return WMI[p]||'';
+}
+
+// panel orientation for the matrix. H = waagerecht (horizontal), V = senkrecht (vertical).
+// 1,2,3,5,6 fixed horizontal; 7-14 fixed vertical; 4 (Heckklappe unten) defaults V, Hor tick -> H.
+// BVAT §5: Dachrahmen ("roof frame or pillar") is VERTICAL. Change 5/6 back to 'H' if you disagree.
+const ORIENT={1:'H',2:'H',3:'H',4:'V',5:'V',6:'V',7:'V',8:'V',9:'V',10:'V',11:'V',12:'V',13:'V',14:'V'};
+function awLookup(divider,orient,dents,size){
+  if(!dents||!size) return 0;
+  const M=AWDATA[divider][orient]; if(!M) return 0;
+  const S=String(size);
+  const bands=Object.keys(M).map(Number).sort((a,b)=>a-b);
+  let chosen=null;                                   // smallest band >= dents that has this size
+  for(const b of bands){ if(b>=dents && M[b][S]!=null){ chosen=b; break; } }
+  if(chosen==null){ for(let i=bands.length-1;i>=0;i--){ if(M[bands[i]][S]!=null){ chosen=bands[i]; break; } } }
+  return chosen!=null ? M[chosen][S] : 0;
+}
+// these always apply — ticked and locked
+const ALWAYS=['ruest','finish','finishmax'];
+(function buildRates(){
+  const box=document.getElementById('rates');
+  RATES.forEach(([key,label,val])=>{
+    const on=ALWAYS.includes(key);
+    const div=document.createElement('div');
+    div.className='rate-item'+(on?' on':'');div.id='rate_'+key;
+    const qty = key==='finish' ? `<span class="rqty" id="finishQty">0</span>×` : '';
+    div.innerHTML=`<input type="checkbox" class="rate" data-r="${key}" ${on?'checked disabled':''}><span class="rlabel">${label}</span>${qty}<span class="rval" id="rv_${key}">${val}</span>`;
+    box.appendChild(div);
+  });
+})();
+
+// ---- build panel boxes ----
+const car=document.getElementById('car');
+const centerCol=document.createElement('div');   // Haube/Dach/Heck stack (own proportions)
+centerCol.className='center-col';
+const KLEBEN_ALWAYS=[5,6];   // Dachrahmen L/R — Klebetechnik always applies
+GRID_ORDER.forEach(n=>{
+  const [cls,name,thin]=PANELS[n];
+  const klebLock=KLEBEN_ALWAYS.includes(n);
+  const horTick = (n===4) ? `<label class="alubox hor"><input type="checkbox" data-p="4" class="hor">Hor</label>` : '';
+  const neuTick = (n===1) ? `<label class="alubox neu"><input type="checkbox" data-p="1" class="neu">Neu</label>` : '';
+  const d=document.createElement('div');
+  d.className='panel '+cls+(thin?' thin':'');
+  d.innerHTML=`
+    <div class="p-head"><span class="num">${n}</span><span class="p-name">${name}</span><button class="camicon" id="cambtn${n}" title="Take photo of this panel" onclick="document.getElementById('cam${n}').click()">📷</button></div>
+    <div class="row">
+      <div class="fld"><span>Qty</span><input type="number" min="0" step="1" data-p="${n}" class="dents"></div>
+      <div class="fld"><span>Size</span><select data-p="${n}" class="size"><option value=""></option>${SIZES.map(s=>`<option value="${s}">${s}</option>`).join('')}</select></div>
+    </div>
+    <div class="chkrow">
+      ${horTick}
+      <label class="alubox"><input type="checkbox" data-p="${n}" class="alu">Alu</label>
+      <label class="alubox kleb"><input type="checkbox" data-p="${n}" class="kleb" ${klebLock?'checked disabled':''}>Kleb</label>
+      <label class="alubox ptp"><input type="checkbox" data-p="${n}" class="ptp">PTP</label>
+      ${neuTick}
+    </div>
+    <input id="cam${n}" type="file" accept="image/*" capture="environment" style="display:none" onchange="photo(${n},this)">
+  `;
+  ([1,2,3,4].includes(n)?centerCol:car).appendChild(d);
+});
+car.appendChild(centerCol);
+
+// ---- recalc / sync boxes -> summary form ----
+function calc(){
+  // derive Marke from the FIN's WMI prefix when Marke is still empty (free, offline)
+  const _vin=document.getElementById('m_vin'), _make=document.getElementById('m_make');
+  if(_make && _vin && !_make.value.trim() && _vin.value.trim().length>=3){
+    const g=makeFromVin(_vin.value); if(g)_make.value=g;
+  }
+  const DIV=activeDivider();
+  const R=RATE_AW_ALL[DIV];
+  let totalDents=0,panelsUsed=0,totalAWpanels=0,klebPanels=0;
+  GRID_ORDER.forEach(n=>{
+    const dents=parseInt(document.querySelector(`.dents[data-p="${n}"]`).value)||0;
+    const size=parseInt(document.querySelector(`.size[data-p="${n}"]`).value)||0;
+    const card=document.querySelector('.'+PANELS[n][0]);
+    const row=document.getElementById('sumrow'+n);
+
+    // orientation: fixed per panel, but panel 4 can be flipped to horizontal via Hor tick
+    let orient=ORIENT[n];
+    if(n===4){const h=document.querySelector('.hor[data-p="4"]'); if(h&&h.checked)orient='H';}
+    let aw=awLookup(DIV,orient,dents,size);
+
+    // BVAT: surcharges COMPOUND, in order Push-to-Paint -> Aluminium -> Klebetechnik
+    const klebOn=document.querySelector(`.kleb[data-p="${n}"]`).checked || KLEBEN_ALWAYS.includes(n);
+    const aluOn =document.querySelector(`.alu[data-p="${n}"]`).checked;
+    const ptpOn =document.querySelector(`.ptp[data-p="${n}"]`).checked;
+    if(ptpOn)  aw*=SUR.ptp;    // -40%
+    if(aluOn)  aw*=SUR.alu;    // +25%
+    if(klebOn) aw*=SUR.kleb;   // +30% (Dachrahmen always)
+
+    document.getElementById('q'+n).textContent = dents>0?dents:'';
+    document.getElementById('sz'+n).textContent = (dents>0&&size>0)?size:'';
+    document.getElementById('aw'+n).textContent = (dents>0&&size>0)?fmtAW(aw):'';
+
+    if(dents>0){
+      panelsUsed++;totalDents+=dents;totalAWpanels+=aw;
+      if(klebOn)klebPanels++;                      // for the BVAT glue-material flat rate
+      card.classList.add('active');row.classList.add('filled');
+    }else{card.classList.remove('active');row.classList.remove('filled');}
+  });
+  // Finish pro Bauteil qty = number of panels with dents
+  const fq=document.getElementById('finishQty'); if(fq)fq.textContent=panelsUsed;
+  const fn=document.getElementById('finNote'); if(fn)fn.textContent=panelsUsed;
+  // highlight ticked rate items
+  document.querySelectorAll('.rate').forEach(c=>{
+    document.getElementById('rate_'+c.dataset.r).classList.toggle('on',c.checked);
+  });
+
+  // ---- AW totals ----
+  const on=k=>{const c=document.querySelector(`.rate[data-r="${k}"]`);return c&&c.checked;};
+  let sund=0;
+  if(on('ruest'))    sund+=R.ruest;
+  if(on('finish'))   sund+=Math.min(panelsUsed*R.finish, R.finishmax);   // capped at Finish Maximalwert
+  if(on('ueber'))    sund+=R.ueber;
+  if(on('hohl'))     sund+=R.hohl;
+  if(on('transfer')) sund+=R.transfer;
+
+  // BVAT flat material costs (EUR net) — separate from AW
+  let mat=0;
+  if(on('hohl')) mat+=MAT.hohl;                                   // €15 cavity protection
+  if(klebPanels>0) mat += klebPanels<=2 ? MAT.kleb_le2 : (klebPanels<=5 ? MAT.kleb_3to5 : MAT.kleb_ge6);
+
+  const fmt=x=>x.toFixed(2).replace('.',',');
+  document.getElementById('awPanels').textContent=fmt(totalAWpanels);
+  document.getElementById('awSund').textContent=fmt(sund);
+  document.getElementById('awGrand').textContent=fmt(totalAWpanels+sund);
+
+  // reflect the active table (10er/12er) in the rate sheet values, notes and badge
+  const setRV=(k,aw)=>{const e=document.getElementById('rv_'+k); if(e)e.textContent=fmt(aw)+' AW';};
+  setRV('ruest',R.ruest);setRV('finish',R.finish);setRV('finishmax',R.finishmax);setRV('ueber',R.ueber);setRV('hohl',R.hohl);setRV('transfer',R.transfer);
+  const ff=document.getElementById('finFactor'); if(ff)ff.textContent=fmt(R.finish);
+  const fm=document.getElementById('finMax');    if(fm)fm.textContent=fmt(R.finishmax);
+  const bd=document.getElementById('tblBadge');  if(bd)bd.textContent=(DIV==='12'?'Tabelle 12er':'Tabelle 10er');
+  save();
+}
+
+// ---- photo (stored in memory, no thumbnail shown) ----
+const PHOTOS={};
+function photo(key,input){
+  const f=input.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=e=>{
+    PHOTOS[key]=e.target.result;
+    const b=document.getElementById('cambtn'+key);
+    if(b)b.classList.add('has');
+    save();
+    if(key==='marke') aiScan(e.target.result,'front');   // Claude: identify make from badge
+    if(key==='vin')   ocrVin(e.target.result);            // OCR first, falls back to Claude
+    if(key==='plate') ocrPlate(e.target.result);          // offline OCR: read Kennzeichen
+  };
+  r.readAsDataURL(f);
+}
+
+// ---- AI photo scan (Claude vision) ----
+const CLAUDE_MODEL='claude-sonnet-5';   // swap to 'claude-haiku-4-5-20251001' for cheaper/faster
+function scanStatus(msg,hideAfter){
+  const el=document.getElementById('scanStatus'); if(!el)return;
+  el.textContent=msg||''; el.style.display=msg?'block':'none';
+  if(hideAfter)setTimeout(()=>{el.style.display='none';},hideAfter);
+}
+function resizeDataURL(src,max,cb){
+  const img=new Image();
+  img.onload=()=>{
+    let w=img.width,h=img.height;
+    if(w>max||h>max){const s=max/Math.max(w,h);w=Math.round(w*s);h=Math.round(h*s);}
+    const c=document.createElement('canvas');c.width=w;c.height=h;
+    c.getContext('2d').drawImage(img,0,0,w,h);
+    cb(c.toDataURL('image/jpeg',0.82));
+  };
+  img.src=src;
+}
+// ---- offline OCR for the number plate (Tesseract.js, runs in the browser) ----
+function loadTesseract(cb){
+  if(window.Tesseract) return cb();
+  scanStatus('OCR wird geladen…');
+  const s=document.createElement('script');
+  s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+  s.onload=()=>cb();
+  s.onerror=()=>scanStatus('OCR konnte nicht geladen werden',4000);
+  document.head.appendChild(s);
+}
+function ocrPlate(dataURL){
+  loadTesseract(()=>{
+    scanStatus('Kennzeichen wird gelesen…');
+    resizeDataURL(dataURL,1400,async(small)=>{
+      try{
+        const {data}=await Tesseract.recognize(small,'eng');
+        const raw=(data.text||'').toUpperCase().replace(/[^A-ZÄÖÜ0-9\s-]/g,' ');
+        // German plate: 1-3 letters (district) + 1-2 letters + 1-4 digits
+        const mm=raw.match(/\b([A-ZÄÖÜ]{1,3})[\s-]*([A-ZÄÖÜ]{1,2})[\s-]*(\d{1,4})\b/);
+        if(mm){
+          document.getElementById('m_plate').value=`${mm[1]}-${mm[2]} ${mm[3]}`;
+          calc(); scanStatus('Kennzeichen ✓',2500);
+        }else{
+          scanStatus('Kennzeichen nicht erkannt — bitte manuell eintragen',4500);
+        }
+      }catch(e){ scanStatus('OCR fehlgeschlagen',4000); }
+    });
+  });
+}
+
+function ocrVin(dataURL){
+  loadTesseract(()=>{
+    scanStatus('FIN wird gelesen…');
+    resizeDataURL(dataURL,1600,async(small)=>{
+      const fallback=()=>{
+        const key=(document.getElementById('aiKey').value||'').trim();
+        if(key){ scanStatus('OCR unklar — frage Claude…'); aiScan(dataURL,'fin'); }
+        else scanStatus('FIN nicht erkannt — bitte manuell eintragen',4500);
+      };
+      try{
+        const {data}=await Tesseract.recognize(small,'eng');
+        const raw=(data.text||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+        // VIN = 17 chars; the alphabet excludes I, O and Q
+        const mm=raw.match(/[A-HJ-NPR-Z0-9]{17}/);
+        if(mm){
+          document.getElementById('m_vin').value=mm[0];
+          calc(); scanStatus('FIN ✓ (OCR)',2500);
+        }else fallback();
+      }catch(e){ fallback(); }
+    });
+  });
+}
+
+function aiScan(dataURL,kind){
+  const key=(document.getElementById('aiKey').value||'').trim();
+  if(!key){scanStatus('⚙ Bitte zuerst Anthropic API-Key eingeben (AI-Scan).',4000);return;}
+  scanStatus(kind==='front'?'Marke wird erkannt…':'Scanne FIN…');
+  const prompt = kind==='front'
+    ? 'This image shows the front of a car. Identify the car manufacturer (make) from the badge/logo. Reply with ONLY compact JSON, no prose: {"make":""}. Use an empty string if unsure.'
+    : 'Read the 17-character Vehicle Identification Number (VIN / FIN) shown in this image (letters and digits, no I/O/Q). Reply with ONLY compact JSON, no prose: {"vin":""}. Empty string if unreadable.';
+  resizeDataURL(dataURL,1024,async(small)=>{
+    try{
+      const res=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{
+          'content-type':'application/json',
+          'x-api-key':key,
+          'anthropic-version':'2023-06-01',
+          'anthropic-dangerous-direct-browser-access':'true'
+        },
+        body:JSON.stringify({
+          model:CLAUDE_MODEL,
+          max_tokens:300,
+          messages:[{role:'user',content:[
+            {type:'image',source:{type:'base64',media_type:'image/jpeg',data:small.split(',')[1]}},
+            {type:'text',text:prompt}
+          ]}]
+        })
+      });
+      const j=await res.json();
+      if(!res.ok){scanStatus('AI-Fehler: '+((j.error&&j.error.message)||res.status),6000);return;}
+      let txt='';
+      try{txt=(j.content||[]).map(p=>p.text||'').join('');}catch(e){}
+      const mm=txt.match(/\{[\s\S]*\}/);
+      const data=mm?JSON.parse(mm[0]):{};
+      if(kind==='front'){
+        if(data.make)  document.getElementById('m_make').value=data.make;
+        if(data.plate) document.getElementById('m_plate').value=data.plate;
+      }else{
+        if(data.vin)   document.getElementById('m_vin').value=String(data.vin).toUpperCase().replace(/\s+/g,'');
+      }
+      calc();
+      scanStatus('Fertig ✓',2500);
+    }catch(e){scanStatus('Scan fehlgeschlagen',4000);}
+  });
+}
+
+// ---- generate the emailable Kalkulation document ----
+function buildDoc(){
+  const DIV=activeDivider();
+  const R=RATE_AW_ALL[DIV];
+  const div=(DIV==='12'?12:10);
+  const rate=parseFloat(document.getElementById('m_rate').value)||0;
+  const awEuro=rate/div;
+  const de=x=>x.toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const eur=x=>de(x)+' EUR';
+  const val=id=>(document.getElementById(id).value||'').trim();
+
+  // ---- panels ----
+  let rows='',pdrAW=0,panelsUsed=0,klebPanels=0;
+  GRID_ORDER.forEach(n=>{
+    const dents=parseInt(document.querySelector(`.dents[data-p="${n}"]`).value)||0;
+    if(!dents)return;
+    const size=parseInt(document.querySelector(`.size[data-p="${n}"]`).value)||0;
+    let orient=ORIENT[n];
+    if(n===4){const h=document.querySelector('.hor[data-p="4"]');if(h&&h.checked)orient='H';}
+    let aw=awLookup(DIV,orient,dents,size);
+    const kleb=document.querySelector(`.kleb[data-p="${n}"]`).checked||KLEBEN_ALWAYS.includes(n);
+    const alu=document.querySelector(`.alu[data-p="${n}"]`).checked;
+    const ptp=document.querySelector(`.ptp[data-p="${n}"]`).checked;
+    if(ptp)aw*=SUR.ptp; if(alu)aw*=SUR.alu; if(kleb)aw*=SUR.kleb;
+    pdrAW+=aw;panelsUsed++; if(kleb)klebPanels++;
+    const neuEl=document.querySelector(`.neu[data-p="${n}"]`);
+    const neuTxt=(neuEl&&neuEl.checked)?' <b>(Neu)</b>':'';
+    rows+=`<tr><td>${n}</td><td>${PANELS[n][1].replace(/­/g,'')}${neuTxt}</td><td class="c">${dents}</td><td class="c">${size||''}</td>`+
+          `<td class="c">${kleb?'✓':''}</td><td class="c">${alu?'✓':''}</td><td class="c">${ptp?'✓':''}</td>`+
+          `<td class="r">${de(aw)} AW</td><td class="r">${eur(aw*awEuro)}</td></tr>`;
+  });
+  if(panelsUsed===0){alert('Bitte zuerst Dellen erfassen.');return null;}
+
+  const on=k=>{const c=document.querySelector(`.rate[data-r="${k}"]`);return c&&c.checked;};
+  const pdrEur=pdrAW*awEuro;
+  const vorbAW=R.ruest, vorbEur=vorbAW*awEuro;
+  const finAW=Math.min(panelsUsed*R.finish,R.finishmax), finEur=finAW*awEuro;
+  const ueberOn=on('ueber'),   ueberAW=ueberOn?R.ueber:0,    ueberEur=ueberAW*awEuro;      // in PDR block
+  const transOn=on('transfer'),transAW=transOn?R.transfer:0, transEur=transAW*awEuro;      // in PDR block
+  const verb=0.02*(pdrEur+vorbEur+ueberEur+transEur+finEur);   // Verbrauchsmaterial 2% of net PDR labour
+  const pdrGesamt=pdrEur+vorbEur+ueberEur+transEur+finEur+verb;
+
+  const labourRow=(l,aw,e)=>`<tr class="tot"><td colspan="7">${l}</td><td class="r">${de(aw)} AW</td><td class="r">${eur(e)}</td></tr>`;
+  let extra='';
+  if(ueberOn) extra+=labourRow('Übergreifzone',ueberAW,ueberEur);
+  if(transOn) extra+=labourRow('Überführung',transAW,transEur);
+
+  // Zusatzleistungen = Hohlraumkonservierung only (matches the user's document)
+  let zRows='',zSum=0;
+  if(on('hohl')){const e=R.hohl*awEuro;zSum+=e;zRows=`<tr><td>Hohlraumkons.</td><td class="r">${de(R.hohl)} AW</td><td class="r">${eur(e)}</td></tr>`;}
+
+  const netto=pdrGesamt+zSum;
+  const mwst=netto*0.19, brutto=netto+mwst;
+
+  // ---- photos appendix ----
+  const labels={marke:'Marke / Front',plate:'Kennzeichen',vin:'FIN'};
+  let pics='';
+  const addPic=(k,cap)=>{ if(PHOTOS[k]) pics+=`<figure><img src="${PHOTOS[k]}"><figcaption>${cap}</figcaption></figure>`; };
+  ['marke','plate','vin'].forEach(k=>addPic(k,labels[k]));          // vehicle shots first
+  GRID_ORDER.forEach(n=>addPic(n,n+' – '+PANELS[n][1].replace(/­/g,'')));  // then panels 1-14 in order
+
+  // filled values print as text; empty ones print a blank line to write on
+  const L=(l,v)=>`<div class="hln"><span>${l}</span>${v?`<span>${v}</span>`:'<span class="fill"></span>'}</div>`;
+  const hdrCol1=L('Kunde',val('m_kunde'))+L('Adresse',val('m_adresse'))+L('PLZ/Stadt',val('m_plz'));
+  const hdrCol2=L('Hersteller/Modell',[val('m_make'),val('m_model')].filter(Boolean).join(' '))+
+    L('Kennzeichen',val('m_plate'))+L('FIN',val('m_vin'))+L('Farbe',val('m_farbe'))+
+    L('Laufleistung',val('m_km'))+L('Erstzulassung',val('m_erst'))+
+    `<div class="hln"><span>WBW / Restwert</span><span class="fill"></span></div>`;
+  const hdrCol3=L('Protokollnummer',val('m_protokoll'))+L('Begutachtungsdatum',val('m_date'))+
+    L('Rechnungsnummer',val('m_rechnung'))+
+    L('Auftragsnummer',val('m_auftrag'))+L('Sachbearbeiter',val('m_sachb'));
+  const doc=`<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>Kalkulation</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;color:#111;font-size:12px;margin:24px;}
+  h1{font-size:22px;margin:0 0 2px;text-align:center;letter-spacing:1px}
+  .sub{text-align:center;color:#555;margin-bottom:16px}
+  .hdr3{display:flex;gap:24px;margin-bottom:14px}
+  .hdr3>div{flex:1}
+  .hln{display:flex;gap:6px;padding:1px 0;font-size:11px;align-items:flex-end}
+  .hln span:first-child{color:#555;min-width:110px;flex:0 0 auto;font-weight:normal}
+  .hln span:last-child{font-weight:bold}
+  .hln .fill{flex:1;border-bottom:1px solid #999;height:11px}
+  h2{font-size:14px;margin:16px 0 4px}
+  .subttl{color:#555;font-size:11px;margin:0 0 6px}
+  table.calc{width:100%;border-collapse:collapse;font-size:12px}
+  table.calc th,table.calc td{border:1px solid #bbb;padding:4px 6px}
+  table.calc th{background:#eee;text-align:left;font-size:11px}
+  td.c{text-align:center}td.r{text-align:right}
+  tr.tot td{font-weight:bold;background:#f5f5f5}
+  .noborder td{border:0;padding:3px 6px}
+  .sumtbl{width:60%;margin-left:auto;border-collapse:collapse;margin-top:6px}
+  .sumtbl td{padding:4px 6px}
+  .sumtbl tr.net td,.sumtbl tr.br td{font-weight:bold;border-top:1px solid #999}
+  .sumtbl tr.br td{font-size:15px;border-top:2px solid #333}
+  .disc{font-size:10px;color:#555;margin-top:22px;line-height:1.5}
+  figure{display:inline-block;width:31%;margin:1%;text-align:center;vertical-align:top}
+  figure img{width:100%;border:1px solid #ccc;border-radius:4px}
+  figcaption{font-size:10px;color:#444;margin-top:2px}
+  .photos{margin-top:10px}
+  @media print{.noprint{display:none}}
+  .noprint{text-align:center;margin-bottom:14px}
+  .noprint button{font-size:14px;padding:8px 18px;border:0;border-radius:6px;background:#1565c0;color:#fff;font-weight:bold;cursor:pointer}
+</style></head><body>
+<div class="noprint"><button onclick="window.print()">Drucken / als PDF speichern</button></div>
+<h1>Kalkulation</h1>
+<div class="sub">Lackschadenfreie Dellenreparatur (BVAT)</div>
+<div class="hdr3"><div>${hdrCol1}</div><div>${hdrCol2}</div><div>${hdrCol3}</div></div>
+<div class="subttl">Stundenlohn: ${de(rate)} EUR/h · ${div} AW = 1 h · Tabelle ${div}er</div>
+<table class="calc">
+  <thead><tr><th>Pos.</th><th>Bauteil</th><th>Dellen</th><th>Größe</th><th>Zug</th><th>Alu</th><th>PTP</th><th>AW</th><th>Summe</th></tr></thead>
+  <tbody>
+    ${rows}
+    <tr class="tot"><td colspan="7">PDR</td><td class="r">${de(pdrAW)} AW</td><td class="r">${eur(pdrEur)}</td></tr>
+    <tr class="tot"><td colspan="7">Vorbereitung</td><td class="r">${de(vorbAW)} AW</td><td class="r">${eur(vorbEur)}</td></tr>
+    ${extra}
+    <tr class="tot"><td colspan="7">Finish</td><td class="r">${de(finAW)} AW</td><td class="r">${eur(finEur)}</td></tr>
+    <tr class="tot"><td colspan="7">Verbrauchsmaterial 2,00 %</td><td></td><td class="r">${eur(verb)}</td></tr>
+    <tr class="tot"><td colspan="7">Gesamtbetrag PDR</td><td></td><td class="r">${eur(pdrGesamt)}</td></tr>
+  </tbody>
+</table>
+${zRows?`<h2>Zusatzleistungen</h2>
+<table class="calc"><thead><tr><th>Dienstleistung</th><th>AW</th><th>Betrag</th></tr></thead><tbody>${zRows}
+<tr class="tot"><td>Gesamtbetrag</td><td></td><td class="r">${eur(zSum)}</td></tr></tbody></table>`:''}
+<h2>Zusammenfassung</h2>
+<table class="sumtbl">
+  <tr><td>PDR</td><td class="r">${eur(pdrGesamt)}</td></tr>
+  ${zSum?`<tr><td>Zusatzleistungen</td><td class="r">${eur(zSum)}</td></tr>`:''}
+  <tr class="net"><td>Netto</td><td class="r">${eur(netto)}</td></tr>
+  <tr><td>MwSt. 19 %</td><td class="r">${eur(mwst)}</td></tr>
+  <tr class="br"><td>Brutto</td><td class="r">${eur(brutto)}</td></tr>
+</table>
+<p class="disc">Es wird keine Haftung für Vorschäden (z.B. Kratzer, Parkschäden), technische Mängel und für die im Fahrzeug liegenden Gegenstände übernommen. Bei der Reparatur können ggf. zusätzliche Demontagearbeiten erfolgen. Wichtig: Bei schlechten Arbeitsbedingungen (verschmutzte, nasse Oberflächen sowie schlechte Lichtverhältnisse) kann eine Bewertungskorrektur erfolgen.</p>
+${pics?`<h2>Fotos</h2><div class="photos">${pics}</div>`:''}
+</body></html>`;
+
+  const nm='Kalkulation_'+((val('m_plate')||val('m_vin')||'PDR').replace(/[^A-Za-z0-9\-]/g,'')||'PDR');
+  return {html:doc,name:nm};
+}
+
+// open in a new tab (print / save as PDF)
+function genDoc(){
+  const d=buildDoc(); if(!d)return;
+  const w=window.open('','_blank');
+  if(!w){alert('Popup blockiert — bitte Popups für diese Seite erlauben.');return;}
+  w.document.write(d.html); w.document.close();
+}
+
+// build a PDF and hand it to the phone's share sheet (→ e-mail with attachment)
+function loadHtml2Pdf(cb){
+  if(window.html2pdf) return cb();
+  scanStatus('PDF-Modul wird geladen…');
+  const s=document.createElement('script');
+  s.src='https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+  s.onload=()=>cb();
+  s.onerror=()=>scanStatus('PDF-Modul konnte nicht geladen werden',4000);
+  document.head.appendChild(s);
+}
+function shareDoc(){
+  const d=buildDoc(); if(!d)return;
+  loadHtml2Pdf(async()=>{
+    scanStatus('PDF wird erstellt…');
+    const holder=document.createElement('div');
+    holder.style.cssText='position:fixed;left:-10000px;top:0;width:794px;background:#fff';
+    // strip the on-screen print button out of the printable copy
+    holder.innerHTML=d.html.replace(/<div class="noprint">[\s\S]*?<\/div>/,'')
+                           .replace(/^[\s\S]*?<body>/,'').replace(/<\/body>[\s\S]*$/,'');
+    document.body.appendChild(holder);
+    try{
+      const blob=await html2pdf().set({
+        margin:8, filename:d.name+'.pdf',
+        image:{type:'jpeg',quality:0.9},
+        html2canvas:{scale:2,useCORS:true},
+        jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
+      }).from(holder).outputPdf('blob');
+      const file=new File([blob],d.name+'.pdf',{type:'application/pdf'});
+      if(navigator.canShare && navigator.canShare({files:[file]})){
+        await navigator.share({files:[file],title:'Kalkulation',text:'Kalkulation – lackschadenfreie Dellenreparatur'});
+        scanStatus('Geteilt ✓',2000);
+      }else{
+        const u=URL.createObjectURL(blob);
+        const a=document.createElement('a');a.href=u;a.download=d.name+'.pdf';a.click();
+        URL.revokeObjectURL(u);
+        scanStatus('PDF gespeichert ✓',3000);
+      }
+    }catch(e){ scanStatus('PDF fehlgeschlagen',4000); }
+    holder.remove();
+  });
+}
+
+// ---- autosave ----
+function save(){
+  try{
+    const data={meta:{},panels:{},photos:{},rates:{}};
+    ['m_kunde','m_adresse','m_plz','m_make','m_model','m_plate','m_date','m_vin','m_farbe','m_km','m_erst','m_protokoll','m_rechnung','m_auftrag','m_sachb','m_rate'].forEach(id=>data.meta[id]=$('#'+id).value);
+    document.querySelectorAll('.rate').forEach(c=>data.rates[c.dataset.r]=c.checked);
+    GRID_ORDER.forEach(n=>{
+      data.panels[n]={
+        d:document.querySelector(`.dents[data-p="${n}"]`).value,
+        a:document.querySelector(`.size[data-p="${n}"]`).value,
+        alu:document.querySelector(`.alu[data-p="${n}"]`).checked,
+        kleb:document.querySelector(`.kleb[data-p="${n}"]`).checked,
+        ptp:document.querySelector(`.ptp[data-p="${n}"]`).checked
+      };
+      const hh=document.querySelector(`.hor[data-p="${n}"]`); if(hh)data.panels[n].hor=hh.checked;
+      const nn=document.querySelector(`.neu[data-p="${n}"]`); if(nn)data.panels[n].neu=nn.checked;
+    });
+    data.photos={...PHOTOS};   // panel photos + meta photos (marke, vin)
+    localStorage.setItem('pdrcalc',JSON.stringify(data));
+  }catch(e){}
+}
+function load(){
+  try{
+    const data=JSON.parse(localStorage.getItem('pdrcalc'));if(!data)return;
+    Object.entries(data.meta||{}).forEach(([id,v])=>{if($('#'+id))$('#'+id).value=v;});
+    Object.entries(data.panels||{}).forEach(([n,v])=>{
+      const de=document.querySelector(`.dents[data-p="${n}"]`);
+      const ae=document.querySelector(`.size[data-p="${n}"]`);
+      const ce=document.querySelector(`.alu[data-p="${n}"]`);
+      const ke=document.querySelector(`.kleb[data-p="${n}"]`);
+      const pe=document.querySelector(`.ptp[data-p="${n}"]`);
+      if(de)de.value=v.d||'';if(ae)ae.value=v.a||'';if(ce)ce.checked=!!v.alu;if(pe)pe.checked=!!v.ptp;
+      if(ke && !KLEBEN_ALWAYS.includes(Number(n)))ke.checked=!!v.kleb;   // Dachrahmen stay locked-on
+      const he=document.querySelector(`.hor[data-p="${n}"]`); if(he)he.checked=!!v.hor;
+      const ne=document.querySelector(`.neu[data-p="${n}"]`); if(ne)ne.checked=!!v.neu;
+    });
+    Object.entries(data.photos||{}).forEach(([n,src])=>{
+      PHOTOS[n]=src;
+      const b=document.getElementById('cambtn'+n);
+      if(b)b.classList.add('has');
+    });
+    Object.entries(data.rates||{}).forEach(([k,v])=>{
+      if(ALWAYS.includes(k))return;               // locked-on items stay ticked
+      const c=document.querySelector(`.rate[data-r="${k}"]`);if(c)c.checked=!!v;
+    });
+  }catch(e){}
+}
+function resetAll(){
+  if(!confirm('Clear all entries and photos?'))return;
+  localStorage.removeItem('pdrcalc');location.reload();
+}
+
+document.addEventListener('input',calc);
+document.addEventListener('change',calc);
+
+// restore & persist the Anthropic API key (kept out of the main save blob)
+const _ak=document.getElementById('aiKey');
+if(_ak){ _ak.value=localStorage.getItem('anthropicKey')||''; _ak.addEventListener('input',()=>localStorage.setItem('anthropicKey',_ak.value)); }
+
+if(!$('#m_date').value)$('#m_date').valueAsDate=new Date();
+load();calc();
+</script>
+</body>
+</html>
