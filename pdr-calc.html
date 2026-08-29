@@ -130,6 +130,19 @@
     .totbar{position:static}.btns,.camicon{display:none}
     body{background:#fff}.wrap{max-width:none}
   }
+
+  /* ---------- photo crop modal (FIN/VIN) ---------- */
+  .crop-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:100;align-items:center;justify-content:center;padding:12px}
+  .crop-overlay.show{display:flex}
+  .crop-box{background:#fff;border-radius:10px;padding:12px;max-width:96vw;display:flex;flex-direction:column;gap:10px;align-items:center}
+  .crop-hint{margin:0;font-size:12px;font-weight:bold;color:var(--ink);text-align:center;max-width:480px}
+  #cropCanvas{touch-action:none;max-width:92vw;max-height:60vh;border:1px solid var(--line);border-radius:6px;cursor:crosshair}
+  .crop-btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  .crop-btn{border:0;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:bold;cursor:pointer}
+  .crop-btn.cancel{background:#8a2b2b;color:#fff}
+  .crop-btn.skip{background:#ececec;color:var(--ink);border:1px solid var(--line)}
+  .crop-btn.ok{background:var(--good);color:#fff}
+  .crop-btn.ok:disabled{background:#a8c9b3;cursor:not-allowed}
 </style>
 </head>
 <body>
@@ -151,7 +164,7 @@
       <label><span>Marke</span><input id="m_make"><button type="button" class="camicon" id="cambtnmarke" title="Take photo" onclick="document.getElementById('cammarke').click()">📷</button><input id="cammarke" type="file" accept="image/*" capture="environment" style="display:none" onchange="photo('marke',this)"></label>
       <label><span>Modell</span><input id="m_model"></label>
       <label><span>Kennzeichen</span><input id="m_plate"><button type="button" class="camicon" id="cambtnplate" title="Kennzeichen scannen (OCR)" onclick="document.getElementById('camplate').click()">📷</button><input id="camplate" type="file" accept="image/*" capture="environment" style="display:none" onchange="photo('plate',this)"></label>
-      <label><span>FIN</span><input id="m_vin"><button type="button" class="camicon" id="cambtnvin" title="Take photo" onclick="document.getElementById('camvin').click()">📷</button><input id="camvin" type="file" accept="image/*" capture="environment" style="display:none" onchange="photo('vin',this)"></label>
+      <label><span>FIN</span><input id="m_vin"><button type="button" class="camicon" id="cambtnvin" title="Foto aufnehmen" onclick="document.getElementById('camvin').click()">📷</button><button type="button" class="camicon" id="libbtnvin" title="Aus Fotos wählen" onclick="document.getElementById('libvin').click()">🖼️</button><input id="camvin" type="file" accept="image/*" capture="environment" style="display:none" onchange="photo('vin',this)"><input id="libvin" type="file" accept="image/*" style="display:none" onchange="photo('vin',this)"></label>
       <label><span>Farbe</span><input id="m_farbe"></label>
       <label><span>Laufleistung</span><input id="m_km" inputmode="numeric"></label>
       <label><span>Datum</span><input id="m_date" type="date"></label>
@@ -192,6 +205,19 @@
     <div class="rates" id="rates"></div>
   </div>
 
+</div>
+
+<!-- ============ PHOTO CROP MODAL (used for FIN/VIN photos) ============ -->
+<div id="cropOverlay" class="crop-overlay">
+  <div class="crop-box">
+    <p class="crop-hint">Ziehe ein Rechteck um die FIN-Zeichen — nur dieser Ausschnitt wird gelesen.</p>
+    <canvas id="cropCanvas"></canvas>
+    <div class="crop-btns">
+      <button type="button" class="crop-btn cancel" onclick="closeCropper()">Abbrechen</button>
+      <button type="button" class="crop-btn skip" onclick="cropperUseFull()">Ganzes Bild</button>
+      <button type="button" class="crop-btn ok" id="cropConfirmBtn" onclick="cropperConfirm()" disabled>✂️ Zuschnitt verwenden</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -243,10 +269,11 @@ const RATE_AW_ALL={
 const SUR={ptp:0.60, alu:1.25, kleb:1.30};
 // BVAT flat material costs in EUR (net)
 const MAT={hohl:15, kleb_le2:10, kleb_3to5:15, kleb_ge6:20};
-// 12er table is used for BMW & Mercedes; 10er for everything else. Decided by the Make field.
+// 12er table: BMW & Mercedes families, incl. their sub-brands MINI (BMW) and Smart (Mercedes) —
+// both follow the parent group's factory labor-time system. 10er for everything else.
 function activeDivider(){
   const mk=(document.getElementById('m_make').value||'').toLowerCase();
-  return /bmw|merc|benz|amg|maybach|alpina|brabus/.test(mk) ? '12' : '10';
+  return /bmw|mini|merc|benz|amg|maybach|alpina|brabus|smart/.test(mk) ? '12' : '10';
 }
 // panel AW display: round to 2dp, drop trailing zeros, German comma
 function fmtAW(x){ return (Math.round(x*100)/100).toString().replace('.',','); }
@@ -403,6 +430,81 @@ function calc(){
   save();
 }
 
+// ---- manual crop modal (used before FIN/VIN OCR — photo can come from the vehicle,
+// a paper form, or any other source, so the user draws a box around just the VIN text) ----
+let _cropImg=null, _cropScale=1, _cropSel=null, _cropCallback=null, _cropDragging=false, _cropDragStart=null;
+function openCropper(dataURL,cb){
+  const img=new Image();
+  img.onload=()=>{
+    _cropImg=img; _cropCallback=cb; _cropSel=null;
+    const canvas=document.getElementById('cropCanvas');
+    const maxW=Math.min(window.innerWidth*0.92,900), maxH=window.innerHeight*0.6;
+    const s=Math.min(maxW/img.naturalWidth, maxH/img.naturalHeight);
+    canvas.width=Math.max(1,Math.round(img.naturalWidth*s));
+    canvas.height=Math.max(1,Math.round(img.naturalHeight*s));
+    _cropScale=s;
+    document.getElementById('cropConfirmBtn').disabled=true;
+    redrawCropper();
+    document.getElementById('cropOverlay').classList.add('show');
+  };
+  img.src=dataURL;
+}
+function redrawCropper(){
+  if(!_cropImg)return;
+  const canvas=document.getElementById('cropCanvas'), ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(_cropImg,0,0,canvas.width,canvas.height);
+  if(_cropSel && _cropSel.w>2 && _cropSel.h>2){
+    ctx.fillStyle='rgba(0,0,0,.55)';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    const{x,y,w,h}=_cropSel;
+    ctx.drawImage(_cropImg, x/_cropScale,y/_cropScale,w/_cropScale,h/_cropScale, x,y,w,h);
+    ctx.strokeStyle='#1565c0'; ctx.lineWidth=2; ctx.strokeRect(x,y,w,h);
+  }
+}
+function hideCropperUI(){ document.getElementById('cropOverlay').classList.remove('show'); }
+function closeCropper(){ hideCropperUI(); _cropCallback=null; _cropImg=null; _cropSel=null; }
+function cropperUseFull(){
+  const cb=_cropCallback, img=_cropImg;
+  hideCropperUI(); _cropCallback=null; _cropImg=null; _cropSel=null;
+  if(cb&&img) cb(img.src);
+}
+function cropperConfirm(){
+  if(!_cropSel||!_cropImg)return;
+  const cb=_cropCallback, img=_cropImg, sel=_cropSel, scale=_cropScale;
+  hideCropperUI(); _cropCallback=null; _cropImg=null; _cropSel=null;
+  const sx=sel.x/scale, sy=sel.y/scale, sw=sel.w/scale, sh=sel.h/scale;
+  const c=document.createElement('canvas');
+  c.width=Math.max(1,Math.round(sw)); c.height=Math.max(1,Math.round(sh));
+  c.getContext('2d').drawImage(img,sx,sy,sw,sh,0,0,c.width,c.height);
+  if(cb) cb(c.toDataURL('image/png'));
+}
+(function initCropperPointerEvents(){
+  const canvas=document.getElementById('cropCanvas'); if(!canvas)return;
+  const toCanvasPt=e=>{
+    const r=canvas.getBoundingClientRect();
+    return {x:(e.clientX-r.left)*(canvas.width/r.width), y:(e.clientY-r.top)*(canvas.height/r.height)};
+  };
+  canvas.addEventListener('pointerdown',e=>{
+    _cropDragStart=toCanvasPt(e); _cropDragging=true;
+    try{canvas.setPointerCapture(e.pointerId);}catch(err){}
+  });
+  canvas.addEventListener('pointermove',e=>{
+    if(!_cropDragging)return;
+    const p=toCanvasPt(e);
+    const x0=Math.min(_cropDragStart.x,p.x), y0=Math.min(_cropDragStart.y,p.y);
+    const x1=Math.max(_cropDragStart.x,p.x), y1=Math.max(_cropDragStart.y,p.y);
+    _cropSel={x:x0,y:y0,w:x1-x0,h:y1-y0};
+    redrawCropper();
+  });
+  canvas.addEventListener('pointerup',()=>{
+    _cropDragging=false;
+    const ok=_cropSel && _cropSel.w>8 && _cropSel.h>8;
+    document.getElementById('cropConfirmBtn').disabled=!ok;
+    if(!ok){ _cropSel=null; redrawCropper(); }
+  });
+})();
+
 // ---- photo (stored in memory, no thumbnail shown) ----
 const PHOTOS={};
 function photo(key,input){
@@ -414,8 +516,8 @@ function photo(key,input){
     if(b)b.classList.add('has');
     save();
     if(key==='marke') aiScan(e.target.result,'front');   // Claude: identify make from badge
-    if(key==='vin')   ocrVin(e.target.result);            // OCR first, falls back to Claude
-    if(key==='plate') ocrPlate(e.target.result);          // offline OCR: read Kennzeichen
+    if(key==='vin')   openCropper(e.target.result, cropped=>ocrVin(cropped));   // crop to FIN text first, then OCR (falls back to Claude)
+    if(key==='plate') ocrPlate(e.target.result);          // offline OCR: read Kennzeichen (auto-crops on the blue stripe)
   };
   r.readAsDataURL(f);
 }
