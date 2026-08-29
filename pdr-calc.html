@@ -480,10 +480,10 @@ function preprocessForOcr(dataURL,maxW,cb){
 // explicit worker API (not the Tesseract.recognize() shorthand) so we can restrict the
 // character set and page-segmentation mode — both meaningfully improve plate/VIN accuracy —
 // and so real errors surface instead of failing silently.
-async function runOcr(imgDataURL,charWhitelist){
+async function runOcr(imgDataURL,charWhitelist,psm){
   const worker=await Tesseract.createWorker('eng');
   try{
-    await worker.setParameters({tessedit_char_whitelist:charWhitelist,tessedit_pageseg_mode:'7'});
+    await worker.setParameters({tessedit_char_whitelist:charWhitelist,tessedit_pageseg_mode:psm||'11'});
     const {data}=await worker.recognize(imgDataURL);
     return data.text||'';
   } finally {
