@@ -477,6 +477,83 @@ function preprocessForOcr(dataURL,maxW,cb){
   img.src=dataURL;
 }
 
+// German/EU plates have a solid blue stripe (stars + "D") at the LEFT edge of the plate.
+// Detecting it and cropping to everything to its right isolates the actual plate characters
+// from background clutter (grille, badges, pavement) — the single biggest source of bad reads
+// on a full, uncropped bumper photo. Falls back to the original photo untouched if no
+// confident blue stripe is found (bad angle, glare, no plate in frame, etc).
+function detectAndCropPlate(dataURL,cb){
+  const img=new Image();
+  img.onload=()=>{
+    const ow=img.width, oh=img.height;
+    const detW=Math.min(700,ow), scale=detW/ow, detH=Math.round(oh*scale);
+    if(detW<10||detH<10){ cb(dataURL,false); return; }
+    const dc=document.createElement('canvas'); dc.width=detW; dc.height=detH;
+    const dctx=dc.getContext('2d'); dctx.drawImage(img,0,0,detW,detH);
+    const d=dctx.getImageData(0,0,detW,detH).data;
+    const w=detW,h=detH;
+    const mask=new Uint8Array(w*h);
+    for(let i=0,p=0;i<d.length;i+=4,p++){
+      const r=d[i],g=d[i+1],b=d[i+2];
+      mask[p]=(b>r+25&&b>g+10&&b>70&&b<235&&r<160)?1:0;
+    }
+    // dilate ~6px (4-connectivity) so the stars/"D" holes inside the stripe merge into one solid blob
+    let cur=mask;
+    for(let it=0;it<6;it++){
+      const nxt=new Uint8Array(w*h);
+      for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+        const p=y*w+x;
+        if(cur[p]){nxt[p]=1;continue;}
+        nxt[p]=((x>0&&cur[p-1])||(x<w-1&&cur[p+1])||(y>0&&cur[p-w])||(y<h-1&&cur[p+w]))?1:0;
+      }
+      cur=nxt;
+    }
+    // connected components (4-connectivity, iterative flood fill)
+    const labels=new Int32Array(w*h).fill(-1);
+    const stack=new Int32Array(w*h);
+    const comps=[];
+    for(let p0=0;p0<w*h;p0++){
+      if(!cur[p0]||labels[p0]!==-1) continue;
+      let sp=0; stack[sp++]=p0; labels[p0]=1;
+      let x0=w,x1=0,y0=h,y1=0;
+      while(sp>0){
+        const q=stack[--sp]; const qx=q%w, qy=(q/w)|0;
+        if(qx<x0)x0=qx; if(qx>x1)x1=qx; if(qy<y0)y0=qy; if(qy>y1)y1=qy;
+        if(qx>0){const n=q-1; if(cur[n]&&labels[n]===-1){labels[n]=1;stack[sp++]=n;}}
+        if(qx<w-1){const n=q+1; if(cur[n]&&labels[n]===-1){labels[n]=1;stack[sp++]=n;}}
+        if(qy>0){const n=q-w; if(cur[n]&&labels[n]===-1){labels[n]=1;stack[sp++]=n;}}
+        if(qy<h-1){const n=q+w; if(cur[n]&&labels[n]===-1){labels[n]=1;stack[sp++]=n;}}
+      }
+      comps.push({x0,x1,y0,y1});
+    }
+    // pick the tallest component shaped like a plate's blue stripe (tall, narrow, in left ~60%)
+    let best=null;
+    for(const c of comps){
+      const bw=c.x1-c.x0, bh=c.y1-c.y0;
+      if(bw<=0||bh<=0) continue;
+      let origCount=0;
+      for(let y=c.y0;y<=c.y1;y++)for(let x=c.x0;x<=c.x1;x++) if(mask[y*w+x]) origCount++;
+      const fill=origCount/(bw*bh);
+      if(bh>bw*1.2 && bw<w*0.25 && bh>h*0.05 && fill>0.08 && c.x1<w*0.6){
+        if(!best || bh>(best.y1-best.y0)) best=c;
+      }
+    }
+    if(!best){ cb(dataURL,false); return; }
+    const inv=1/scale;
+    const bx1=best.x1*inv, by0=best.y0*inv, by1=best.y1*inv;
+    const bh=by1-by0, marginY=bh*0.08;
+    const cropY0=Math.max(0,by0-marginY), cropY1=Math.min(oh,by1+marginY);
+    const cropX0=bx1, cropX1=Math.min(ow, bx1 + bh*5.5); // plate extends right of stripe roughly ~4.5-5x its height; clamped to image edge
+    if(cropX1-cropX0<20 || cropY1-cropY0<10){ cb(dataURL,false); return; }
+    const cc=document.createElement('canvas');
+    cc.width=Math.round(cropX1-cropX0); cc.height=Math.round(cropY1-cropY0);
+    cc.getContext('2d').drawImage(img,cropX0,cropY0,cropX1-cropX0,cropY1-cropY0,0,0,cc.width,cc.height);
+    cb(cc.toDataURL('image/png'),true);
+  };
+  img.onerror=()=>cb(dataURL,false);
+  img.src=dataURL;
+}
+
 // explicit worker API (not the Tesseract.recognize() shorthand) so we can restrict the
 // character set and page-segmentation mode — both meaningfully improve plate/VIN accuracy —
 // and so real errors surface instead of failing silently.
@@ -494,9 +571,12 @@ async function runOcr(imgDataURL,charWhitelist,psm){
 function ocrPlate(dataURL){
   loadTesseract(()=>{
     scanStatus('Kennzeichen wird gelesen…');
-    preprocessForOcr(dataURL,1800,async(proc)=>{
+    detectAndCropPlate(dataURL,(focused,cropped)=>{
+    preprocessForOcr(focused,1800,async(proc)=>{
       try{
-        const raw0=await runOcr(proc,'ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜ0123456789- ');
+        // a confident blue-stripe crop is a clean single line -> psm 7; otherwise fall back
+        // to sparse-text mode (11) since we're still searching the whole scene
+        const raw0=await runOcr(proc,'ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜ0123456789- ', cropped?'7':'11');
         const raw=raw0.toUpperCase().replace(/[^A-ZÄÖÜ0-9\s-]/g,' ').replace(/\s+/g,' ').trim();
         // German plate: 1-3 letters (district) + 1-2 letters + 1-4 digits
         const mm=raw.match(/\b([A-ZÄÖÜ]{1,3})[\s-]*([A-ZÄÖÜ]{1,2})[\s-]*(\d{1,4})\b/);
@@ -510,6 +590,7 @@ function ocrPlate(dataURL){
           scanStatus('Kennzeichen nicht erkannt — bitte manuell eintragen',4500);
         }
       }catch(e){ scanStatus('OCR-Fehler: '+(e&&e.message?e.message:e),5000); }
+    });
     });
   });
 }
