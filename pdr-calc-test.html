@@ -1067,7 +1067,7 @@ function buildPdfBlob(d){
 
   const grayFill=[245,245,245];
   const panelBody = d.panels.map(function(p){
-    return [p.n, p.name, p.dents, p.size||'', p.kleb?'\u2713':'', p.alu?'\u2713':'', p.ptp?'\u2713':'', de(p.aw)+' AW', eur(p.eur)];
+    return [p.n, p.name, p.dents, p.size||'', p.kleb?'X':'', p.alu?'X':'', p.ptp?'X':'', de(p.aw)+' AW', eur(p.eur)];
   });
   function totRow(label,aw,e,bold){
     const st = bold?{fontStyle:'bold',fillColor:grayFill}:{fontSize:8,textColor:[68,68,68],fillColor:grayFill};
@@ -1088,14 +1088,16 @@ function buildPdfBlob(d){
     styles:{fontSize:8.5, cellPadding:1.6, lineColor:[187,187,187], lineWidth:0.1, overflow:'linebreak'},
     headStyles:{fillColor:[238,238,238], textColor:0, fontStyle:'bold'},
     columnStyles:{
-      0:{cellWidth:8}, 2:{cellWidth:14,halign:'center'}, 3:{cellWidth:14,halign:'center'},
+      0:{cellWidth:11}, 2:{cellWidth:14,halign:'center'}, 3:{cellWidth:14,halign:'center'},
       4:{cellWidth:10,halign:'center'}, 5:{cellWidth:10,halign:'center'}, 6:{cellWidth:10,halign:'center'},
       7:{halign:'right',cellWidth:22}, 8:{halign:'right',cellWidth:26}
     }
   });
   y = doc.lastAutoTable.finalY + 6;
 
+  const pageH = doc.internal.pageSize.getHeight();
   if(d.zSum){
+    if(y > pageH-50){ doc.addPage(); y = margin; }
     doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(0);
     doc.text('Zusatzleistungen', margin, y); y+=2;
     const zBody=[];
@@ -1111,6 +1113,7 @@ function buildPdfBlob(d){
     y = doc.lastAutoTable.finalY + 6;
   }
 
+  if(y > pageH-55){ doc.addPage(); y = margin; }
   doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(0);
   doc.text('Zusammenfassung', margin, y); y+=6;
   doc.setFont('helvetica','normal'); doc.setFontSize(10);
@@ -1124,6 +1127,7 @@ function buildPdfBlob(d){
   doc.text(eur(d.gesamt), pageW-margin, y+1.5, {align:'right'});
   y += 11;
 
+  if(y > pageH-30){ doc.addPage(); y = margin; }
   doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(85);
   const maxW = pageW-2*margin;
   const disc1='Gem\u00e4\u00df \u00a7 19 UStG wird keine Umsatzsteuer berechnet (Kleinunternehmerregelung).';
